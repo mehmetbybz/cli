@@ -7,15 +7,16 @@ const cmark = require('cmark-gfm')
 const mdx = require('@mdx-js/mdx')
 const mkdirp = require('mkdirp')
 const jsdom = require('jsdom')
-const npm = require('../lib/npm.js')
+const npm = require('../../lib/npm.js')
 
-const config = require('./config.json')
-
-const docsRoot = __dirname
+const dir = __dirname
+const docsRoot = path.resolve(dir, '..')
 const inputRoot = path.join(docsRoot, 'content')
 const outputRoot = path.join(docsRoot, 'output')
 
-const template = fs.readFileSync('template.html').toString()
+const config = require(path.join(dir, 'config.json'))
+const template = fs.readFileSync(path.join(dir, 'template.html')).toString()
+const nav = yaml.parse(fs.readFileSync(path.join(docsRoot, 'nav.yml')).toString(), 'utf8')
 
 const run = async function () {
   try {
@@ -59,8 +60,8 @@ function ensureNavigationComplete (navPaths, fsPaths) {
     if (missingNav.length > 0) {
       message += '\nThe following path(s) exist on disk but are not present in nav.yml:\n\n'
 
-      for (const nav of missingNav) {
-        message += `  ${nav}\n`
+      for (const n of missingNav) {
+        message += `  ${n}\n`
       }
     }
 
@@ -83,9 +84,6 @@ function ensureNavigationComplete (navPaths, fsPaths) {
 }
 
 function getNavigationPaths () {
-  const navFilename = path.join(docsRoot, 'nav.yml')
-  const nav = yaml.parse(fs.readFileSync(navFilename).toString(), 'utf8')
-
   return walkNavigation(nav)
 }
 
