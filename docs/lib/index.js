@@ -3,7 +3,7 @@ const { join, basename, resolve } = require('path')
 const transformHTML = require('./transform-html.js')
 const { version } = require('../../lib/npm.js')
 const { aliases } = require('../../lib/utils/cmd-list')
-const { shorthands, definitions } = require('../../lib/utils/config/index.js')
+const { shorthands, definitions } = require('@npmcli/config/lib/definitions')
 
 const DOC_EXT = '.md'
 
@@ -40,11 +40,23 @@ const getCommandByDoc = (docFile, docExt) => {
   // `npx` is not technically a command in and of itself,
   // so it just needs the usage of npm exex
   const srcName = name === 'npx' ? 'exec' : name
-  const { params, usage = [''] } = require(`../../lib/commands/${srcName}`)
+  const { params, usage = [''], workspaces } = require(`../../lib/commands/${srcName}`)
   const usagePrefix = name === 'npx' ? 'npx' : `npm ${name}`
+  if (params) {
+    for (const param of params) {
+      if (definitions[param].exclusive) {
+        for (const e of definitions[param].exclusive) {
+          if (!params.includes(e)) {
+            params.splice(params.indexOf(param) + 1, 0, e)
+          }
+        }
+      }
+    }
+  }
 
   return {
     name,
+    workspaces,
     params: name === 'npx' ? null : params,
     usage: usage.map(u => `${usagePrefix} ${u}`.trim()).join('\n'),
   }
@@ -54,7 +66,7 @@ const replaceVersion = (src) => src.replace(/@VERSION@/g, version)
 
 const replaceUsage = (src, { path }) => {
   const replacer = assertPlaceholder(src, path, TAGS.USAGE)
-  const { usage, name } = getCommandByDoc(path, DOC_EXT)
+  const { usage, name, workspaces } = getCommandByDoc(path, DOC_EXT)
 
   const synopsis = ['```bash', usage]
 
@@ -66,14 +78,16 @@ const replaceUsage = (src, { path }) => {
   }, [])
 
   if (cmdAliases.length === 1) {
-    synopsis.push('')
-    synopsis.push(`alias: ${cmdAliases[0]}`)
+    synopsis.push('', `alias: ${cmdAliases[0]}`)
   } else if (cmdAliases.length > 1) {
-    synopsis.push('')
-    synopsis.push(`aliases: ${cmdAliases.join(', ')}`)
+    synopsis.push('', `aliases: ${cmdAliases.join(', ')}`)
   }
 
   synopsis.push('```')
+
+  if (!workspaces) {
+    synopsis.push('', 'Note: This command is unaware of workspaces.')
+  }
 
   return src.replace(replacer, synopsis.join('\n'))
 }
@@ -105,7 +119,7 @@ const replaceConfig = (src, { path }) => {
   }
 
   const allConfig = Object.entries(definitions).sort(sort)
-    .map(([_, def]) => def.describe())
+    .map(([, def]) => def.describe())
     .join('\n\n')
 
   return src.replace(replacer, allConfig)
@@ -143,7 +157,7 @@ const replaceHelpLinks = (src) => {
 
 const transformMan = (src, { data, unified, remarkParse, remarkMan }) => unified()
   .use(remarkParse)
-  .use(remarkMan)
+  .use(remarkMan, { version: `NPM@${version}` })
   .processSync(`# ${data.title}(${data.section}) - ${data.description}\n\n${src}`)
   .toString()
 
